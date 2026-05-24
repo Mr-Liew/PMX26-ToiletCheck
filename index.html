@@ -85,7 +85,7 @@
       width: 310px;
       text-align: left;
       box-sizing: border-box;
-      border-left: 5px solid red; /* Visual indicator that they are OUT */
+      border-left: 5px solid green; /* Visual indicator that they are safely IN */
       cursor: pointer;
       transition: background 0.2s, transform 0.1s;
       position: relative;
@@ -110,34 +110,24 @@
       color: #555;
     }
     
-    /* Live Warning Timer Tag Styling */
-    .timer-tag {
+    /* Timestamp design log inside card */
+    .time-tag {
       position: absolute;
       right: 16px;
-      top: 12px;
-      font-size: 0.9em;
+      top: 14px;
+      font-size: 0.8em;
       font-weight: bold;
-      color: red;
-      background: #fff0f0;
+      color: #0057e7;
+      background: #eef3fb;
       padding: 2px 6px;
       border-radius: 4px;
-    }
-    
-    /* 🚨 Light red warning flash if player is gone >= 5 minutes */
-    .player-card.overtime {
-      background: #ffcccc;
-      border-left: 5px solid #cc0000;
-    }
-    .player-card.overtime .timer-tag {
-      background: #cc0000;
-      color: white;
     }
   </style>
 </head>
 <body>
 
   <h2>3rd NATIONAL OPEN TEAM CHESS CHAMPIONSHIP 2026</h2>
-  <h4>PMX Trophy — Toilet Tracking Board</h4>
+  <h4>PMX Trophy — Playing Hall Tracking Board</h4>
   
   <button id="scanBtn">Start Barcode Scanner</button>
 
@@ -147,7 +137,7 @@
 
   <div class="spinner" id="spinner"></div>
 
-  <div class="board-title">Players Currently Away:</div>
+  <div class="board-title">Players Currently Inside Hall:</div>
   <div id="activeBoard">
     </div>
 
@@ -163,7 +153,7 @@
     let lastScanId = "";
     let lastScanTime = 0;
     
-    // Store structural objects tracking players currently away
+    // Store structural objects tracking players currently INSIDE the room
     let activePlayers = {}; 
 
     function onScanSuccess(decodedText, decodedResult) {
@@ -219,32 +209,33 @@
     }
 
     function handleBoardUpdate(data, userId) {
-      if (data.status === "Out") {
-        // 🚀 CRITICAL UPDATE: Add player to the TOP of your tracking object board
+      // 🔄 FIX: Corrected state direction mapping
+      if (data.status === "In") {
+        // Player entered or returned -> Add them to the board tracking list
         activePlayers[userId] = {
           id: data.id,
           name: data.name,
           team: data.nationality,
-          outTime: new Date() // Tracks live browser session time for the counting counter
+          time: data.time.split(" ")[1] // Extract just the HH:mm:ss for clean card placement
         };
-      } else if (data.status === "In") {
-        // ✂️ Remove player card from board upon successful return scan
+      } else if (data.status === "Out") {
+        // Player left room for toilet -> Remove card immediately from display board
         delete activePlayers[userId];
       }
       renderBoard();
     }
 
-    // Direct manual override command if a player walks in without scanning badge
+    // Direct manual override command if a player walks OUT without scanning badge
     function manualClear(userId, playerName) {
-      const confirmOverride = confirm(`Misscan Override:\nChange ${playerName} status back to "IN" manually?`);
+      const confirmOverride = confirm(`Misscan Override:\nChange ${playerName} status to "OUT" (Left room) manually?`);
       if (confirmOverride) {
         spinner.style.display = "block";
         
-        // Remove visually instantly from your screen view
+        // Remove visually instantly from your active screen view
         delete activePlayers[userId];
         renderBoard();
         
-        // Quietly update spreadsheet log background context so logging histories remain accurate
+        // Execute back-end request so spreadsheet logs them as "Out"
         processAttendance(userId);
       }
     }
@@ -255,7 +246,7 @@
       
       const entries = Object.entries(activePlayers);
       if (entries.length === 0) {
-        activeBoard.innerHTML = "<p style='color:#777; font-size:0.9em; margin-top:10px;'>All players safely accounted for.</p>";
+        activeBoard.innerHTML = "<p style='color:#777; font-size:0.9em; margin-top:10px;'>No players clocked into the playing hall.</p>";
         return;
       }
 
@@ -269,7 +260,7 @@
         card.onclick = () => manualClear(userId, player.name);
 
         card.innerHTML = `
-          <div class="timer-tag" id="timer-${userId}">0m 0s</div>
+          <div class="time-tag">${player.time}</div>
           <h3>${player.name}</h3>
           <p><b>User ID:</b> ${player.id}</p>
           <p><b>Team:</b> ${player.team}</p>
@@ -277,46 +268,11 @@
 
         activeBoard.appendChild(card);
       });
-
-      updateTimers();
-    }
-
-    // Real-time ticking updates for active cards
-    function updateTimers() {
-      const now = new Date();
-      let hasActiveCards = false;
-
-      Object.entries(activePlayers).forEach(([userId, player]) => {
-        hasActiveCards = true;
-        const timerElement = document.getElementById(`timer-${userId}`);
-        const cardElement = document.getElementById(`card-${userId}`);
-        
-        if (timerElement && cardElement) {
-          const elapsedMs = now - player.outTime;
-          const totalSecs = Math.floor(elapsedMs / 1000);
-          const mins = Math.floor(totalSecs / 60);
-          const secs = totalSecs % 60;
-
-          timerElement.innerText = `${mins}m ${secs}s`;
-
-          // 🚨 Toggles light-red emergency warn flags if out duration hits 5 mins or higher
-          if (mins >= 5) {
-            cardElement.classList.add("overtime");
-          } else {
-            cardElement.classList.remove("overtime");
-          }
-        }
-      });
-
-      // Keep tracking ticking loop execution active frame by frame if cards exist
-      if (hasActiveCards) {
-        setTimeout(updateTimers, 1000);
-      }
     }
 
     scanBtn.addEventListener("click", startScan);
     
-    // Initial display trigger
+    // Initial board paint
     renderBoard();
   </script>
 </body>
