@@ -85,7 +85,7 @@
       width: 310px;
       text-align: left;
       box-sizing: border-box;
-      border-left: 5px solid green; /* Visual indicator that they are safely IN */
+      border-left: 5px solid red; /* Visual alert color meaning they are occupied inside the toilet */
       cursor: pointer;
       transition: background 0.2s, transform 0.1s;
       position: relative;
@@ -101,7 +101,7 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      padding-right: 50px;
+      padding-right: 70px;
     }
     .player-card p {
       line-height: 1.3;
@@ -110,24 +110,34 @@
       color: #555;
     }
     
-    /* Timestamp design log inside card */
-    .time-tag {
+    /* Live Warning Timer Tag Styling */
+    .timer-tag {
       position: absolute;
       right: 16px;
-      top: 14px;
-      font-size: 0.8em;
+      top: 12px;
+      font-size: 0.9em;
       font-weight: bold;
-      color: #0057e7;
-      background: #eef3fb;
+      color: red;
+      background: #fff0f0;
       padding: 2px 6px;
       border-radius: 4px;
+    }
+    
+    /* 🚨 Light red warning background flash if player stays out >= 5 minutes */
+    .player-card.overtime {
+      background: #ffcccc;
+      border-left: 5px solid #cc0000;
+    }
+    .player-card.overtime .timer-tag {
+      background: #cc0000;
+      color: white;
     }
   </style>
 </head>
 <body>
 
   <h2>3rd NATIONAL OPEN TEAM CHESS CHAMPIONSHIP 2026</h2>
-  <h4>PMX Trophy — Playing Hall Tracking Board</h4>
+  <h4>PMX Trophy — Toilet Occupancy Board</h4>
   
   <button id="scanBtn">Start Barcode Scanner</button>
 
@@ -137,7 +147,7 @@
 
   <div class="spinner" id="spinner"></div>
 
-  <div class="board-title">Players Currently Inside Hall:</div>
+  <div class="board-title">Players Currently In Toilet:</div>
   <div id="activeBoard">
     </div>
 
@@ -153,7 +163,7 @@
     let lastScanId = "";
     let lastScanTime = 0;
     
-    // Store structural objects tracking players currently INSIDE the room
+    // Tracks current occupants in the bathroom
     let activePlayers = {}; 
 
     function onScanSuccess(decodedText, decodedResult) {
@@ -184,7 +194,6 @@
       });
     }
 
-    // Main controller communicating changes directly to Google Sheets
     async function processAttendance(userId) {
       try {
         const res = await fetch(`${API_URL}?userId=${encodeURIComponent(userId)}`, {
@@ -209,44 +218,43 @@
     }
 
     function handleBoardUpdate(data, userId) {
-      // 🔄 FIX: Corrected state direction mapping
+      // 🚽 POV FIX: Matches your target sheet configuration rules perfectly
       if (data.status === "In") {
-        // Player entered or returned -> Add them to the board tracking list
+        // Enters toilet -> Push card onto your visual view dashboard
         activePlayers[userId] = {
           id: data.id,
           name: data.name,
           team: data.nationality,
-          time: data.time.split(" ")[1] // Extract just the HH:mm:ss for clean card placement
+          outTime: new Date() // Tracks counting runtime locally 
         };
       } else if (data.status === "Out") {
-        // Player left room for toilet -> Remove card immediately from display board
+        // Exits toilet and goes back -> Wipe card instantly from display tracking stack
         delete activePlayers[userId];
       }
       renderBoard();
     }
 
-    // Direct manual override command if a player walks OUT without scanning badge
+    // Direct manual override command if a player walks out of the toilet without scanning badge
     function manualClear(userId, playerName) {
-      const confirmOverride = confirm(`Misscan Override:\nChange ${playerName} status to "OUT" (Left room) manually?`);
+      const confirmOverride = confirm(`Misscan Override:\nChange ${playerName} status to "OUT" (Returned to hall) manually?`);
       if (confirmOverride) {
         spinner.style.display = "block";
         
-        // Remove visually instantly from your active screen view
+        // Remove visually instantly from your phone view
         delete activePlayers[userId];
         renderBoard();
         
-        // Execute back-end request so spreadsheet logs them as "Out"
+        // Quietly execute request to write the "Out" record into your log sheet backend
         processAttendance(userId);
       }
     }
 
-    // Refresh layout display stack completely
     function renderBoard() {
       activeBoard.innerHTML = "";
       
       const entries = Object.entries(activePlayers);
       if (entries.length === 0) {
-        activeBoard.innerHTML = "<p style='color:#777; font-size:0.9em; margin-top:10px;'>No players clocked into the playing hall.</p>";
+        activeBoard.innerHTML = "<p style='color:#777; font-size:0.9em; margin-top:10px;'>Toilet is currently empty.</p>";
         return;
       }
 
@@ -256,11 +264,11 @@
         card.className = "player-card";
         card.id = `card-${userId}`;
         
-        // Bind manual tap click listener directly onto the card container element
+        // Bind manual tap click handler directly onto container layout
         card.onclick = () => manualClear(userId, player.name);
 
         card.innerHTML = `
-          <div class="time-tag">${player.time}</div>
+          <div class="timer-tag" id="timer-${userId}">0m 0s</div>
           <h3>${player.name}</h3>
           <p><b>User ID:</b> ${player.id}</p>
           <p><b>Team:</b> ${player.team}</p>
@@ -268,11 +276,44 @@
 
         activeBoard.appendChild(card);
       });
+
+      updateTimers();
+    }
+
+    function updateTimers() {
+      const now = new Date();
+      let hasActiveCards = false;
+
+      Object.entries(activePlayers).forEach(([userId, player]) => {
+        hasActiveCards = true;
+        const timerElement = document.getElementById(`timer-${userId}`);
+        const cardElement = document.getElementById(`card-${userId}`);
+        
+        if (timerElement && cardElement) {
+          const elapsedMs = now - player.outTime;
+          const totalSecs = Math.floor(elapsedMs / 1000);
+          const mins = Math.floor(totalSecs / 60);
+          const secs = totalSecs % 60;
+
+          timerElement.innerText = `${mins}m ${secs}s`;
+
+          // Trigger light-red alert styles when gone for 5 minutes or longer
+          if (mins >= 5) {
+            cardElement.classList.add("overtime");
+          } else {
+            cardElement.classList.remove("overtime");
+          }
+        }
+      });
+
+      if (hasActiveCards) {
+        setTimeout(updateTimers, 1000);
+      }
     }
 
     scanBtn.addEventListener("click", startScan);
     
-    // Initial board paint
+    // Initial display painting initialization
     renderBoard();
   </script>
 </body>
