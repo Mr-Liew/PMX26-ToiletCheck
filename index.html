@@ -28,18 +28,25 @@
     }
     button:disabled { background: #ccc; cursor: not-allowed; }
     
-    /* 📐 Optimized Barcode-focused Camera Container */
+    /* 📐 Optimized & Constrained Barcode Viewport Area */
     .scanner-container {
       margin: 10px auto;
-      max-width: 340px; 
+      max-width: 320px; 
+      max-height: 160px; /* 🛠️ Hard limit to force a small, thin barcode-focused height */
       border-radius: 12px;
-      overflow: hidden;
+      overflow: hidden;   /* Cuts off excess vertical video feed smoothly */
       box-shadow: 0 4px 8px rgba(0,0,0,0.1);
       background: #000;
       display: none;
+      position: relative;
     }
     #reader { 
       width: 100%; 
+    }
+    
+    /* Tweak internal video positioning slightly so it centers perfectly in the thin box */
+    #reader video {
+      object-fit: cover;
     }
 
     .card {
@@ -132,7 +139,6 @@
       const userId = decodedText.trim();
       const now = Date.now();
 
-      // Avoid double scans within 5 seconds
       if (userId === lastScanId && now - lastScanTime < 5000) {
         return;
       }
@@ -153,10 +159,10 @@
 
       html5QrcodeScanner = new Html5Qrcode("reader");
       
-      // 📐 Custom bounding parameters crafted to map thin linear barcodes nicely
+      // 📐 Adjusted config for thin barcode layout overlay
       const config = { 
         fps: 20, 
-        qrbox: { width: 260, height: 100 }, 
+        qrbox: { width: 250, height: 80 }, 
         aspectRatio: 1.0 
       };
 
@@ -207,15 +213,13 @@
     function showResult(data) {
       resultDiv.style.display = "block";
       
-      // Map data directly to streamlined layout values
       document.getElementById("name").innerText = data.name;
       document.getElementById("uid").innerText = data.id;
-      document.getElementById("nat").innerText = data.nationality; // maps data row to Team Name field
+      document.getElementById("nat").innerText = data.nationality; 
       document.getElementById("time").innerText = data.time;
       document.getElementById("status").innerText = data.status;
       document.getElementById("status").className = "status " + (data.status === "In" ? "in" : "out");
 
-      // Handle time lapse flag checking (Alert trigger highlights red if >= 5 mins)
       if (data.status === "Out" && data.duration) {
         document.getElementById("duration").innerText = `Duration Away: ${data.duration}`;
         const durationParts = data.duration.split(/[ms ]/).filter(Boolean);
@@ -226,7 +230,6 @@
         resultDiv.style.background = "white";
       }
 
-      // Auto-reset display state back to clean standby after 5 seconds
       if (resetTimer) clearTimeout(resetTimer);
       resetTimer = setTimeout(() => {
         resultDiv.style.display = "none";
