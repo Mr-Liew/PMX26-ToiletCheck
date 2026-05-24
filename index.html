@@ -28,23 +28,30 @@
     }
     button:disabled { background: #ccc; cursor: not-allowed; }
     
-    /* 📐 Fix: Fluid layout that matches the library's internal rendering aspect ratio */
-    .scanner-container {
+    /* 📐 The Scale Fix: Clamps the outer space used by the scanner on your layout */
+    .scanner-outer-wrapper {
       margin: 10px auto;
-      max-width: 340px; 
-      border-radius: 12px;
+      max-width: 340px;
+      height: 190px; /* Force a low-profile footprint on the page layout */
       overflow: hidden;
+      position: relative;
+      border-radius: 12px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      background: #000;
       display: none;
     }
+
+    /* Shrinks the internal rendering engine scale uniformly so the line stays centered and uncut */
+    .scanner-container {
+      width: 100%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.75); /* Zoomed out slightly to fit everything cleanly */
+      background: #000;
+    }
+    
     #reader { 
       width: 100%; 
-    }
-
-    /* Target internal elements to make sure the target scanning area doesn't break */
-    #reader__scan_region {
-      background: #000;
     }
 
     .card {
@@ -103,8 +110,10 @@
   
   <button id="scanBtn">Start Barcode Scanner</button>
 
-  <div class="scanner-container" id="scannerContainer">
-    <div id="reader"></div>
+  <div class="scanner-outer-wrapper" id="scannerWrapper">
+    <div class="scanner-container">
+      <div id="reader"></div>
+    </div>
   </div>
 
   <div class="spinner" id="spinner"></div>
@@ -125,7 +134,7 @@
     const scanBtn = document.getElementById('scanBtn');
     const spinner = document.getElementById('spinner');
     const resultDiv = document.getElementById('result');
-    const scannerContainer = document.getElementById('scannerContainer');
+    const scannerWrapper = document.getElementById('scannerWrapper');
 
     let html5QrcodeScanner = null;
     let lastScanId = "";
@@ -150,18 +159,16 @@
     }
 
     function startScan() {
-      scannerContainer.style.display = "block";
+      scannerWrapper.style.display = "block";
       scanBtn.innerText = "Scanner Active";
       scanBtn.disabled = true;
 
       html5QrcodeScanner = new Html5Qrcode("reader");
       
-      // 📐 The Fix: Tell the scanning engine directly to use a short, wide landscape perspective 
-      // This forces the laser line to stay directly in the center of the display frame.
       const config = { 
         fps: 20, 
-        qrbox: { width: 260, height: 90 }, // Perfect size for long 1D barcodes
-        aspectRatio: 1.77777778 // Forces standard 16:9 widescreen format (short height, wide frame)
+        qrbox: { width: 250, height: 110 }, // Generous scan target frame size
+        aspectRatio: 1.333333 // Standard robust camera aspect ratio framework
       };
 
       html5QrcodeScanner.start(
@@ -178,7 +185,7 @@
     function stopScan() {
       if (html5QrcodeScanner) {
         html5QrcodeScanner.stop().then(() => {
-          scannerContainer.style.display = "none";
+          scannerWrapper.style.display = "none";
           scanBtn.innerText = "Start Barcode Scanner";
           scanBtn.disabled = false;
         }).catch(err => console.error("Error shutting down camera module.", err));
