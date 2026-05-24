@@ -155,7 +155,28 @@
       resultDiv.style.display = "none";
 
       // Execute backend API request
-      getUserData(userId);
+      async function getUserData(userId) {
+  try {
+    // 🛠️ FIX: Added mode and redirect configurations to prevent mobile fetch dropouts
+    const res = await fetch(`${API_URL}?userId=${encodeURIComponent(userId)}`, {
+      method: "GET",
+      mode: "cors",
+      redirect: "follow"
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! Status: ${res.status}`);
+    }
+
+    const data = await res.json();
+    showResult(data);
+  } catch (err) { 
+    console.error("Fetch full error log:", err);
+    alert("Connection Error! Please check your deployment settings or check your Web App URL."); 
+  } finally {
+    spinner.style.display = "none";
+  }
+}
     }
 
     function startScan() {
